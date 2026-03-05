@@ -1,11 +1,12 @@
 {
-  "version": "1.6.1",
+  "version": "1.6.2",
   "changelog": [
-    "Console window no longer appears when the app launches"
+    "Console window no longer appears when the app launches",
+    "App icon now shows correctly in taskbar and title bar"
   ],
   "files": {
     "app.py": {
-      "sha256": "b4520a582f733286373d4370d862aad59b7c18e350c5d5713816f41256ce8d18"
+      "sha256": "75cef5db06fec641740f2326553198d576a5dee217e654df8495913a0aa9b8a2"
     },
     "generate_notes.py": {
       "sha256": "8a86c5d10c8df4a927d3b89b63ceec99eeed2732195381b70f9e275eaa4fd8ca"

@@ -28,6 +28,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"
 Source: "DnD Notes.exe";     DestDir: "{app}"; Flags: ignoreversion
 Source: "app.py";            DestDir: "{app}"; Flags: ignoreversion
 Source: "generate_notes.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "icon.ico";          DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

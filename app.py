@@ -6,6 +6,15 @@ Double-click 'Launch DnD Notes.bat' to start.
 
 import os, sys, json, queue, threading, subprocess, string, hashlib, urllib.request, shutil, tempfile
 from datetime import date
+
+# Hide the console window on Windows (works even when launched via python.exe)
+if os.name == 'nt':
+    import ctypes
+    _hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    if _hwnd:
+        ctypes.windll.user32.ShowWindow(_hwnd, 0)
+    # Tell Windows this process has its own taskbar identity (shows our icon, not Python's)
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('NibblesTheDuck.DnDNotes')
 from pathlib import Path
 from flask import Flask, Response, request, jsonify, redirect
 
@@ -16,7 +25,7 @@ GENERATE_SCRIPT = SCRIPT_DIR / "generate_notes.py"
 _tasks: dict    = {}
 
 # ─── Version / Auto-update ────────────────────────────────────────────────────
-APP_VERSION  = "1.6.1"
+APP_VERSION  = "1.6.2"
 MANIFEST_URL = "https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/manifest.json"
 _update_info: dict = {}   # populated by background thread if update available
 
@@ -1767,7 +1776,31 @@ if __name__ == '__main__':
             min_size=(800, 600),
             text_select=True,
         )
-        webview.start()
+        icon_path = str(SCRIPT_DIR / 'icon.ico')
+
+        def _apply_window_icon():
+            """Set taskbar + title bar icon via Windows API after window appears."""
+            if os.name != 'nt' or not os.path.exists(icon_path):
+                return
+            import ctypes, time
+            WM_SETICON = 0x0080
+            LR_LOADFROMFILE = 0x10
+            IMAGE_ICON = 1
+            for _ in range(20):
+                time.sleep(0.3)
+                hwnd = ctypes.windll.user32.FindWindowW(None, 'D&D Notes')
+                if hwnd:
+                    break
+            else:
+                return
+            for size, idx in ((16, 0), (48, 1)):
+                hicon = ctypes.windll.user32.LoadImageW(
+                    None, icon_path, IMAGE_ICON, size, size, LR_LOADFROMFILE)
+                if hicon:
+                    ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, idx, hicon)
+
+        threading.Thread(target=_apply_window_icon, daemon=True).start()
+        webview.start(icon=icon_path if os.path.exists(icon_path) else None)
     except Exception:
         # Fallback: open in system browser if pywebview is unavailable
         import webbrowser

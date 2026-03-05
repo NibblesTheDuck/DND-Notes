@@ -8,6 +8,8 @@ import os
 import subprocess
 import shutil
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+
 
 def _alert(title, message):
     """Show a Windows message box. Works with --windowed (no console)."""
@@ -32,7 +34,8 @@ def find_python():
         try:
             subprocess.check_call(
                 [path, '--version'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=_NO_WINDOW
             )
             return path
         except Exception:
@@ -68,7 +71,7 @@ def main():
         )
         sys.exit(1)
 
-    # Install required packages if not present (shown as a brief splash via subprocess)
+    # Install required packages if not present
     packages = [
         ('flask',     'flask',     'web server'),
         ('pywebview', 'webview',   'app window'),
@@ -78,12 +81,14 @@ def main():
     for pip_name, import_name, label in packages:
         result = subprocess.call(
             [python, '-c', f'import {import_name}'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=_NO_WINDOW
         )
         if result != 0:
             ret = subprocess.call(
                 [python, '-m', 'pip', 'install', pip_name, '--quiet'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                creationflags=_NO_WINDOW
             )
             if ret != 0:
                 _alert(
@@ -93,8 +98,7 @@ def main():
                 )
                 sys.exit(1)
 
-    kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
-    subprocess.call([python, app_path], **kwargs)
+    subprocess.call([python, app_path], creationflags=_NO_WINDOW)
 
 
 if __name__ == '__main__':
