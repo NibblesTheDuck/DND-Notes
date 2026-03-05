@@ -1219,48 +1219,43 @@ def stream(tid):
 
 if __name__ == '__main__':
     cfg = load_cfg()
-    print(f"\n{'─'*50}")
+    print(f"\n{'-'*50}")
     print(f"  D&D Note Generator")
     if cfg.get('campaign_name'):
         print(f"  Campaign : {cfg['campaign_name']}")
     print(f"  Status   : {'ready' if cfg.get('setup_complete') else 'setup wizard will open'}")
     print(f"  URL      : http://localhost:5000")
-    print(f"{'─'*50}\n  Opening browser…\n")
+    print(f"{'-'*50}\n  Opening app window...\n")
 
-    def _open():
-        import time, webbrowser, urllib.request, subprocess
-        url = 'http://localhost:5000'
-        for _ in range(40):
-            try:
-                urllib.request.urlopen(url, timeout=1)
-                break
-            except Exception:
-                time.sleep(0.5)
-        # Try Edge app mode (built into every Windows 10/11 machine)
-        if os.name == 'nt':
-            for edge in [
-                os.path.expandvars(r'%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe'),
-                os.path.expandvars(r'%ProgramFiles%\Microsoft\Edge\Application\msedge.exe'),
-            ]:
-                if os.path.isfile(edge):
-                    try:
-                        subprocess.Popen([edge, f'--app={url}', '--new-window'])
-                        return
-                    except Exception:
-                        pass
-            # Fall back to Chrome app mode if Edge not found
-            for chrome in [
-                os.path.expandvars(r'%ProgramFiles%\Google\Chrome\Application\chrome.exe'),
-                os.path.expandvars(r'%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe'),
-                os.path.expandvars(r'%LocalAppData%\Google\Chrome\Application\chrome.exe'),
-            ]:
-                if os.path.isfile(chrome):
-                    try:
-                        subprocess.Popen([chrome, f'--app={url}', '--new-window'])
-                        return
-                    except Exception:
-                        pass
+    # Run Flask in a background thread so the main thread can drive the UI window
+    def _run_flask():
+        app.run(debug=False, port=5000, threaded=True)
+
+    threading.Thread(target=_run_flask, daemon=True).start()
+
+    # Wait for Flask to be ready (up to 20 seconds)
+    import time, urllib.request
+    url = 'http://localhost:5000'
+    for _ in range(40):
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            break
+        except Exception:
+            time.sleep(0.5)
+
+    try:
+        import webview  # pywebview — isolated native window, no extensions
+        window = webview.create_window(
+            'D&D Notes',
+            url,
+            width=1100,
+            height=800,
+            min_size=(800, 600),
+            text_select=True,
+        )
+        webview.start()
+    except Exception:
+        # Fallback: open in system browser if pywebview is unavailable
+        import webbrowser
         webbrowser.open(url)
-
-    threading.Thread(target=_open, daemon=True).start()
-    app.run(debug=False, port=5000, threaded=True)
+        input("\n  Browser opened. Press Enter here to stop the server.\n")

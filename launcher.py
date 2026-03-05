@@ -1,6 +1,6 @@
 """
 Launcher for DnD Notes — compiled into DnD Notes.exe via PyInstaller.
-Finds system Python, installs Flask if needed, then runs app.py.
+Finds system Python, installs Flask + pywebview if needed, then runs app.py.
 """
 import sys
 import os
@@ -55,20 +55,25 @@ def main():
         input("\n  Press Enter to close.")
         sys.exit(1)
 
-    # Install Flask if not present
-    result = subprocess.call(
-        [python, '-c', 'import flask'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    if result != 0:
-        print("  Installing web server (one-time setup)...")
-        ret = subprocess.call([python, '-m', 'pip', 'install', 'flask', '--quiet'])
-        if ret != 0:
-            print("\n  ERROR: Could not install Flask. Check your internet connection.")
-            input("\n  Press Enter to close.")
-            sys.exit(1)
+    # Install required packages if not present
+    packages = [
+        ('flask',     'flask',   'web server'),
+        ('pywebview', 'webview', 'app window'),
+    ]
+    for pip_name, import_name, label in packages:
+        result = subprocess.call(
+            [python, '-c', f'import {import_name}'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        if result != 0:
+            print(f"  Installing {label} (one-time setup)...")
+            ret = subprocess.call([python, '-m', 'pip', 'install', pip_name, '--quiet'])
+            if ret != 0:
+                print(f"\n  ERROR: Could not install {pip_name}. Check your internet connection.")
+                input("\n  Press Enter to close.")
+                sys.exit(1)
 
-    print("  Starting D&D Notes...  your browser will open in a moment.")
+    print("  Starting D&D Notes...  the app window will open in a moment.")
     print("  Keep this window open while using the app.\n")
 
     subprocess.call([python, app_path])
