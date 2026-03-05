@@ -25,7 +25,7 @@ GENERATE_SCRIPT = SCRIPT_DIR / "generate_notes.py"
 _tasks: dict    = {}
 
 # ─── Version / Auto-update ────────────────────────────────────────────────────
-APP_VERSION  = "1.6.4"
+APP_VERSION  = "1.6.5"
 MANIFEST_URL = "https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/manifest.json"
 _update_info: dict = {}   # populated by background thread if update available
 
@@ -1479,7 +1479,8 @@ def start_install():
             q.put(('log', f'INSTALLING:{short}'))
             proc = subprocess.Popen(
                 [sys.executable, '-m', 'pip', 'install', pip_name, '--progress-bar=off'],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding='utf-8', errors='replace',
             )
             for line in proc.stdout:
                 line = line.strip()
@@ -1682,7 +1683,8 @@ def generate():
                    audio_path, '--session', session_num,
                    '--date', session_date, '--model', model]
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    text=True, env=env, cwd=str(SCRIPT_DIR))
+                                    text=True, encoding='utf-8', errors='replace',
+                                    env=env, cwd=str(SCRIPT_DIR))
             for line in proc.stdout:
                 line = line.rstrip()
                 if line: q.put(('log', line))

@@ -1,11 +1,11 @@
 {
-  "version": "1.6.4",
+  "version": "1.6.5",
   "changelog": [
-    "Fix auto-update hash mismatch"
+    "Fix crash when Whisper progress bar outputs Unicode characters"
   ],
   "files": {
     "app.py": {
-      "sha256": "d8c77da5b3b75c1f8c8d095e0a217fc7b221bec52af0f933e01479878cdf3c43"
+      "sha256": "b51f993260847bb68119e115083ab4faca85fb6904a2914a6f930c5b9827e198"
     },
     "generate_notes.py": {
       "sha256": "5cdffef22d8bab01a6fd14be56d947c05a887ab8b148123f7b956ff223c8e6c6"
