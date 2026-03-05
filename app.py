@@ -18,28 +18,57 @@ _tasks: dict    = {}
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 _DEFAULTS = {
-    "setup_complete": False,
-    "campaign_name":  "",
+    "setup_complete":  False,
+    "gemini_api_key":  "",
+    "active_campaign": "",
+    "campaigns":       {},
+}
+
+_CAMPAIGN_DEFAULTS = {
     "obsidian_vault": "",
     "party_members":  [],
-    "gemini_api_key": "",
     "whisper_model":  "base",
     "note_template":  "",
 }
 
-def load_cfg():
+def _migrate(raw: dict) -> dict:
+    """Upgrade old flat config format to the multi-campaign format."""
+    if 'campaign_name' in raw and 'campaigns' not in raw:
+        name = raw.get('campaign_name', '') or 'My Campaign'
+        raw = {
+            'setup_complete': raw.get('setup_complete', False),
+            'gemini_api_key': raw.get('gemini_api_key', ''),
+            'active_campaign': name,
+            'campaigns': {
+                name: {
+                    'obsidian_vault': raw.get('obsidian_vault', ''),
+                    'party_members':  raw.get('party_members', []),
+                    'whisper_model':  raw.get('whisper_model', 'base'),
+                    'note_template':  raw.get('note_template', ''),
+                }
+            },
+        }
+    return raw
+
+def load_cfg() -> dict:
+    raw = {}
     if CONFIG_FILE.exists():
         try:
-            return {**_DEFAULTS, **json.loads(CONFIG_FILE.read_text())}
+            raw = json.loads(CONFIG_FILE.read_text())
         except Exception:
             pass
-    return dict(_DEFAULTS)
+    return {**_DEFAULTS, **_migrate(raw)}
 
-def save_cfg(updates):
+def save_cfg(updates: dict) -> dict:
     cfg = load_cfg()
     cfg.update(updates)
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
     return cfg
+
+def active_camp(cfg: dict) -> dict:
+    """Return the active campaign's settings, with defaults filled in."""
+    name = cfg.get('active_campaign', '')
+    return {**_CAMPAIGN_DEFAULTS, **cfg.get('campaigns', {}).get(name, {})}
 
 def _new_task():
     tid = f"t{len(_tasks)+1}"
@@ -624,7 +653,12 @@ _MAIN = """
       <p id="campaign-sub">Loading…</p>
     </div>
   </div>
-  <a href="/settings" class="settings-btn">⚙ Settings</a>
+  <div style="display:flex;align-items:center;gap:.6rem">
+    <select id="camp-switch" title="Switch campaign" onchange="switchCampaign(this.value)"
+      style="display:none;font-size:.8rem;padding:.25rem .5rem;border-radius:5px;
+             background:var(--surface);color:var(--text);border:1px solid var(--border);cursor:pointer"></select>
+    <a href="/settings" class="settings-btn">⚙ Settings</a>
+  </div>
 </header>
 
 <div class="page-wrap">
@@ -830,11 +864,25 @@ async function startGenerate() {
 }
 
 fetch('/api/config').then(r => r.json()).then(cfg => {
-  document.getElementById('campaign-name').textContent = cfg.campaign_name || 'D&D Notes';
+  document.getElementById('campaign-name').textContent = cfg.active_campaign || 'D&D Notes';
   document.getElementById('campaign-sub').textContent = (cfg.party_members || []).join(', ') || 'No party configured';
   document.getElementById('session-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('whisper-model').value = cfg.whisper_model || 'base';
+  const sel = document.getElementById('camp-switch');
+  if ((cfg.campaign_names || []).length > 1) {
+    cfg.campaign_names.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name; opt.textContent = name;
+      if (name === cfg.active_campaign) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.style.display = '';
+  }
 });
+async function switchCampaign(name) {
+  await fetch('/api/campaigns/switch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  location.reload();
+}
 </script>
 """
 
@@ -861,6 +909,18 @@ _SETTINGS = """
   <div class="card">
     <div class="card-title">Campaign</div>
     <div class="fg">
+      <label>Active Campaign</label>
+      <div class="irow">
+        <select id="s-campaign-switch" style="flex:1" onchange="onCampaignSwitch(this.value)"></select>
+        <button class="btn btn-secondary btn-inline" onclick="newCampaign()">+ New</button>
+      </div>
+    </div>
+    <div class="fg">
+      <label>Campaign Name</label>
+      <input type="text" id="s-campaign" placeholder="My Campaign" />
+      <div style="font-size:.75rem;color:var(--muted);margin-top:.25rem">Edit to rename this campaign.</div>
+    </div>
+    <div class="fg">
       <label>Obsidian Vault Folder</label>
       <div class="irow">
         <input type="text" id="s-vault" spellcheck="false" readonly
@@ -870,10 +930,6 @@ _SETTINGS = """
           Browse…
         </button>
       </div>
-    </div>
-    <div class="fg">
-      <label>Campaign Name</label>
-      <input type="text" id="s-campaign" placeholder="My Campaign" />
     </div>
     <div class="fg">
       <label>Party Members</label>
@@ -890,6 +946,10 @@ _SETTINGS = """
         <option value="large">Large — best quality</option>
       </select>
     </div>
+    <button class="btn btn-ghost btn-sm" onclick="deleteCampaign()"
+            style="margin-top:.4rem;color:var(--error);border-color:var(--error)">
+      Delete This Campaign
+    </button>
   </div>
   <div class="card">
     <div class="card-title">Note Template</div>
@@ -1011,6 +1071,26 @@ function showFb(el, ok, msg) {
   el.className = 'feedback' + (ok === true ? ' ok' : ok === false ? ' err' : '');
   el.style.display = 'block';
 }
+async function onCampaignSwitch(name) {
+  await fetch('/api/campaigns/switch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  location.reload();
+}
+async function newCampaign() {
+  const name = prompt('New campaign name:');
+  if (!name || !name.trim()) return;
+  const r = await fetch('/api/campaigns/new', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()})});
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  location.reload();
+}
+async function deleteCampaign() {
+  const name = document.getElementById('s-campaign').value || 'this campaign';
+  if (!confirm('Delete "' + name + '"? This cannot be undone.')) return;
+  const r = await fetch('/api/campaigns/delete', {method:'POST'});
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  location.reload();
+}
 async function resetTemplate() {
   if (!confirm('Reset to the built-in default template? Any customisations will be lost.')) return;
   const r = await fetch('/api/template/default');
@@ -1018,14 +1098,14 @@ async function resetTemplate() {
   if (d.template) document.getElementById('s-template').value = d.template;
 }
 async function saveSettings() {
-  const vault = document.getElementById('s-vault').value.trim();
+  const vault    = document.getElementById('s-vault').value.trim();
   const campaign = document.getElementById('s-campaign').value.trim();
-  const model = document.getElementById('s-model').value;
-  const apiKey = document.getElementById('s-apikey').value.trim();
-  const members = _sParty.filter(m => m.trim());
+  const model    = document.getElementById('s-model').value;
+  const apiKey   = document.getElementById('s-apikey').value.trim();
+  const members  = _sParty.filter(m => m.trim());
   const template = document.getElementById('s-template').value;
-  const payload = {campaign_name: campaign, obsidian_vault: vault, party_members: members,
-                   whisper_model: model, note_template: template};
+  const payload  = {campaign_name: campaign, obsidian_vault: vault, party_members: members,
+                    whisper_model: model, note_template: template};
   if (apiKey) payload.gemini_api_key = apiKey;
   await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const fb = document.getElementById('save-fb');
@@ -1033,14 +1113,21 @@ async function saveSettings() {
   setTimeout(() => { fb.style.display = 'none'; }, 3000);
 }
 fetch('/api/config').then(r => r.json()).then(cfg => {
-  document.getElementById('s-vault').value = cfg.obsidian_vault || '';
-  document.getElementById('s-campaign').value = cfg.campaign_name || '';
-  document.getElementById('s-model').value = cfg.whisper_model || 'base';
+  // Populate campaign switcher
+  const sel = document.getElementById('s-campaign-switch');
+  (cfg.campaign_names || []).forEach(name => {
+    const opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === cfg.active_campaign) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  document.getElementById('s-campaign').value = cfg.active_campaign || '';
+  document.getElementById('s-vault').value    = cfg.obsidian_vault || '';
+  document.getElementById('s-model').value    = cfg.whisper_model || 'base';
   if (cfg.gemini_api_key) document.getElementById('s-apikey').placeholder = '(saved — enter new key to change)';
   _sParty = cfg.party_members && cfg.party_members.length ? [...cfg.party_members] : [''];
   _curPath = cfg.obsidian_vault || '';
   renderParty();
-  // Load template: use saved value or fetch the default
   if (cfg.note_template) {
     document.getElementById('s-template').value = cfg.note_template;
   } else {
@@ -1083,8 +1170,78 @@ def settings():
 @app.route('/api/config', methods=['GET', 'POST'])
 def api_config():
     if request.method == 'POST':
-        return jsonify({'ok': True, 'config': save_cfg(request.json or {})})
-    return jsonify(load_cfg())
+        data = request.json or {}
+        cfg  = load_cfg()
+        # Global keys
+        if data.get('gemini_api_key'):
+            cfg['gemini_api_key'] = data['gemini_api_key']
+        if 'setup_complete' in data:
+            cfg['setup_complete'] = data['setup_complete']
+        # Campaign-specific keys
+        old_name = cfg.get('active_campaign', '')
+        new_name = (data.get('campaign_name', '') or old_name).strip() or old_name or 'My Campaign'
+        camp = {**_CAMPAIGN_DEFAULTS, **cfg.get('campaigns', {}).get(old_name, {})}
+        for key in ('obsidian_vault', 'party_members', 'whisper_model', 'note_template'):
+            if key in data:
+                camp[key] = data[key]
+        campaigns = cfg.get('campaigns', {})
+        if old_name and old_name != new_name and old_name in campaigns:
+            del campaigns[old_name]
+        campaigns[new_name] = camp
+        cfg['campaigns']       = campaigns
+        cfg['active_campaign'] = new_name
+        CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+        return jsonify({'ok': True})
+    # GET — return flat view of active campaign for the UI
+    cfg  = load_cfg()
+    camp = active_camp(cfg)
+    return jsonify({
+        'setup_complete':  cfg.get('setup_complete', False),
+        'gemini_api_key':  cfg.get('gemini_api_key', ''),
+        'active_campaign': cfg.get('active_campaign', ''),
+        'campaign_names':  list(cfg.get('campaigns', {}).keys()),
+        'obsidian_vault':  camp.get('obsidian_vault', ''),
+        'party_members':   camp.get('party_members', []),
+        'whisper_model':   camp.get('whisper_model', 'base'),
+        'note_template':   camp.get('note_template', ''),
+    })
+
+@app.route('/api/campaigns/new', methods=['POST'])
+def campaign_new():
+    name = ((request.json or {}).get('name', '') or '').strip()
+    if not name:
+        return jsonify({'error': 'Name required'}), 400
+    cfg = load_cfg()
+    if name in cfg.get('campaigns', {}):
+        return jsonify({'error': 'A campaign with that name already exists'}), 409
+    cfg.setdefault('campaigns', {})[name] = dict(_CAMPAIGN_DEFAULTS)
+    cfg['active_campaign'] = name
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    return jsonify({'ok': True})
+
+@app.route('/api/campaigns/switch', methods=['POST'])
+def campaign_switch():
+    name = ((request.json or {}).get('name', '') or '').strip()
+    cfg  = load_cfg()
+    if name not in cfg.get('campaigns', {}):
+        return jsonify({'error': 'Unknown campaign'}), 404
+    cfg['active_campaign'] = name
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    return jsonify({'ok': True})
+
+@app.route('/api/campaigns/delete', methods=['POST'])
+def campaign_delete():
+    cfg       = load_cfg()
+    campaigns = cfg.get('campaigns', {})
+    if len(campaigns) <= 1:
+        return jsonify({'error': 'Cannot delete the only campaign'}), 400
+    name = cfg.get('active_campaign', '')
+    if name in campaigns:
+        del campaigns[name]
+    cfg['active_campaign'] = next(iter(campaigns))
+    cfg['campaigns']       = campaigns
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    return jsonify({'ok': True, 'new_active': cfg['active_campaign']})
 
 @app.route('/api/check-deps')
 def check_deps():
@@ -1198,14 +1355,15 @@ def generate():
     tid, q = _new_task()
     def run():
         try:
+            camp = active_camp(cfg)
             env = os.environ.copy()
-            env['OBSIDIAN_VAULT']  = cfg.get('obsidian_vault', '')
-            env['CAMPAIGN_NAME']   = cfg.get('campaign_name', 'My Campaign')
-            env['PARTY_MEMBERS']   = ', '.join(cfg.get('party_members') or [])
+            env['OBSIDIAN_VAULT']  = camp.get('obsidian_vault', '')
+            env['CAMPAIGN_NAME']   = cfg.get('active_campaign', 'My Campaign')
+            env['PARTY_MEMBERS']   = ', '.join(camp.get('party_members') or [])
             if cfg.get('gemini_api_key'):
                 env['GEMINI_API_KEY'] = cfg['gemini_api_key']
-            if cfg.get('note_template'):
-                env['NOTE_TEMPLATE'] = cfg['note_template']
+            if camp.get('note_template'):
+                env['NOTE_TEMPLATE'] = camp['note_template']
             cmd = [sys.executable, str(GENERATE_SCRIPT),
                    audio_path, '--session', session_num,
                    '--date', session_date, '--model', model]
