@@ -93,7 +93,8 @@ def main():
                 )
                 sys.exit(1)
 
-    subprocess.call([python, app_path])
+    kwargs = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
+    subprocess.call([python, app_path], **kwargs)
 
 
 if __name__ == '__main__':

@@ -1,14 +1,11 @@
 {
-  "version": "1.6",
+  "version": "1.6.1",
   "changelog": [
-    "README and LICENSE added",
-    "Auto-update - app now checks for updates on startup and shows a banner",
-    "New campaign dialog uses in-app modal instead of browser popup",
-    "AI provider dropdown - Gemini, OpenAI, Anthropic, Ollama"
+    "Console window no longer appears when the app launches"
   ],
   "files": {
     "app.py": {
-      "sha256": "a287c2f33289f5a289f6cecace2d64400f1c7723934eb205e053f728e8056c95"
+      "sha256": "b4520a582f733286373d4370d862aad59b7c18e350c5d5713816f41256ce8d18"
     },
     "generate_notes.py": {
       "sha256": "8a86c5d10c8df4a927d3b89b63ceec99eeed2732195381b70f9e275eaa4fd8ca"
