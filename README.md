@@ -1,6 +1,6 @@
 # D&D Notes Kit
 
-A desktop app that records your D&D sessions and automatically generates structured session notes using AI. Drop in an audio file, click Generate — the app transcribes it with Whisper and sends it to your chosen AI to fill in a customisable notes template, then saves the output straight to your Obsidian vault.
+A desktop app that records your D&D sessions and automatically generates structured session notes using AI. Drop in an audio or video file, click Generate — the app transcribes it with Whisper and sends it to your chosen AI to fill in a customisable notes template, then saves the output straight to your Obsidian vault.
 
 ---
 
@@ -16,14 +16,21 @@ A desktop app that records your D&D sessions and automatically generates structu
 
 ---
 
+## Download
+
+| File | Description |
+|------|-------------|
+| [DnDNotesSetup.exe](https://github.com/NibblesTheDuck/DND-Notes/releases/latest/download/DnDNotesSetup.exe) | Installer — run this once to get set up |
+
+Once installed, the app updates itself automatically. You won't need to re-download the installer for future updates.
+
+---
+
 ## Setup (first time only)
 
-1. Download and unzip the release
-2. Double-click `build.bat` — this builds `DnD Notes.exe` (takes ~60 seconds)
-3. Launch `DnD Notes.exe`
-4. Follow the setup wizard to enter your vault path, party members, and API key
-
-After setup, you can delete `build.bat` and `launcher.py` if you like. Only `DnD Notes.exe` and the `.py` files need to stay together in the same folder.
+1. Download and run `DnDNotesSetup.exe` — installs the app and creates a desktop shortcut
+2. Launch **D&D Notes** from the shortcut
+3. Follow the setup wizard to enter your vault path, party members, and API key
 
 ---
 
