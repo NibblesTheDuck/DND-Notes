@@ -4,7 +4,7 @@ D&D Note Generator — Windows native version
 Double-click 'Launch DnD Notes.bat' to start.
 """
 
-import os, sys, json, queue, threading, subprocess, string
+import os, sys, json, queue, threading, subprocess, string, hashlib, urllib.request, shutil, tempfile
 from datetime import date
 from pathlib import Path
 from flask import Flask, Response, request, jsonify, redirect
@@ -14,6 +14,24 @@ SCRIPT_DIR      = Path(__file__).parent
 CONFIG_FILE     = SCRIPT_DIR / "config.json"
 GENERATE_SCRIPT = SCRIPT_DIR / "generate_notes.py"
 _tasks: dict    = {}
+
+# ─── Version / Auto-update ────────────────────────────────────────────────────
+APP_VERSION  = "1.6"
+MANIFEST_URL = "https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/manifest.json"
+_update_info: dict = {}   # populated by background thread if update available
+
+def _check_for_update():
+    """Background thread: fetch manifest and store update info if newer version found."""
+    try:
+        with urllib.request.urlopen(MANIFEST_URL, timeout=5) as resp:
+            manifest = json.loads(resp.read())
+        if manifest.get("version", "") > APP_VERSION:
+            _update_info.update(manifest)
+    except Exception:
+        pass  # no internet, GitHub down, etc — silently ignore
+
+threading.Thread(target=_check_for_update, daemon=True).start()
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -151,6 +169,13 @@ body { display: flex; flex-direction: column; align-items: center; padding: 2rem
   border-radius: 8px; padding: .45rem .8rem; font-size: .85rem; cursor: pointer;
   text-decoration: none; transition: background .15s; }
 .back-btn:hover { background: var(--border); }
+.update-banner { display:none; background: linear-gradient(135deg,#1a1a4e,#2a2a6e);
+  border: 1px solid var(--accent); border-radius: 10px; padding: .75rem 1rem;
+  margin-bottom: 1rem; width: 100%; max-width: 620px; }
+.update-banner .u-title { color: var(--accent); font-weight: 700; font-size: .9rem; margin-bottom: .3rem; }
+.update-banner .u-log { font-size: .8rem; color: var(--muted); margin: .1rem 0; }
+.update-banner .u-actions { display: flex; gap: .5rem; margin-top: .6rem; align-items: center; }
+.update-banner .u-msg { font-size: .8rem; color: var(--success); display:none; }
 .fg { margin-bottom: 1rem; }
 label { display: block; font-size: .75rem; font-weight: 600; text-transform: uppercase;
   letter-spacing: .07em; color: var(--muted); margin-bottom: .32rem; }
@@ -675,6 +700,16 @@ _MAIN = """
   </div>
 </header>
 
+<div class="update-banner" id="update-banner">
+  <div class="u-title" id="update-title">✦ Update available</div>
+  <div id="update-changelog"></div>
+  <div class="u-actions">
+    <button class="btn btn-primary btn-sm" onclick="applyUpdate()">Update Now</button>
+    <button class="btn btn-ghost btn-sm" onclick="dismissUpdate()">Later</button>
+    <span class="u-msg" id="update-msg"></span>
+  </div>
+</div>
+
 <div class="page-wrap">
   <div class="card">
     <div class="card-title">Session Details</div>
@@ -896,6 +931,44 @@ fetch('/api/config').then(r => r.json()).then(cfg => {
 async function switchCampaign(name) {
   await fetch('/api/campaigns/switch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
   location.reload();
+}
+
+// ── Auto-update banner ─────────────────────────────────────────────────────
+fetch('/api/update-status').then(r => r.json()).then(d => {
+  if (!d.available) return;
+  const banner = document.getElementById('update-banner');
+  document.getElementById('update-title').textContent = `✦ v${d.version} available`;
+  const cl = document.getElementById('update-changelog');
+  (d.changelog || []).forEach(item => {
+    const p = document.createElement('div'); p.className = 'u-log';
+    p.textContent = '• ' + item; cl.appendChild(p);
+  });
+  banner.style.display = 'block';
+});
+async function applyUpdate() {
+  const msg = document.getElementById('update-msg');
+  msg.textContent = 'Updating…'; msg.style.display = 'block';
+  document.querySelector('.u-actions .btn-primary').disabled = true;
+  try {
+    const r = await fetch('/api/apply-update', {method:'POST'});
+    const d = await r.json();
+    if (d.ok) {
+      msg.style.color = 'var(--success)';
+      msg.textContent = '✓ Updated — restart the app to finish';
+      document.querySelector('.u-actions .btn-ghost').style.display = 'none';
+    } else {
+      msg.style.color = 'var(--error)';
+      msg.textContent = '✗ ' + d.error;
+      document.querySelector('.u-actions .btn-primary').disabled = false;
+    }
+  } catch(e) {
+    msg.style.color = 'var(--error)';
+    msg.textContent = '✗ Network error: ' + e.message;
+    document.querySelector('.u-actions .btn-primary').disabled = false;
+  }
+}
+function dismissUpdate() {
+  document.getElementById('update-banner').style.display = 'none';
 }
 </script>
 """
@@ -1480,6 +1553,48 @@ def test_key():
             return jsonify({'ok': False, 'error': str(e)[:300]})
 
     return jsonify({'ok': False, 'error': 'Unknown provider'})
+
+@app.route('/api/update-status')
+def update_status():
+    if _update_info:
+        return jsonify({
+            'available': True,
+            'version':   _update_info.get('version', ''),
+            'changelog': _update_info.get('changelog', []),
+        })
+    return jsonify({'available': False})
+
+@app.route('/api/apply-update', methods=['POST'])
+def apply_update():
+    if not _update_info:
+        return jsonify({'error': 'No update available'}), 400
+    files = _update_info.get('files', {})
+    tmp_files = []
+    try:
+        # Download and verify all files before replacing any
+        for filename, meta in files.items():
+            url      = f"https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/{filename}"
+            expected = meta.get('sha256', '')
+            tmp_path = SCRIPT_DIR / f"{filename}.update_tmp"
+            tmp_files.append(tmp_path)
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                data = resp.read()
+            actual = hashlib.sha256(data).hexdigest()
+            if actual != expected:
+                raise ValueError(f"Hash mismatch for {filename}: expected {expected[:16]}… got {actual[:16]}…")
+            tmp_path.write_bytes(data)
+        # All verified — now replace
+        for filename in files:
+            tmp_path  = SCRIPT_DIR / f"{filename}.update_tmp"
+            dest_path = SCRIPT_DIR / filename
+            shutil.move(str(tmp_path), str(dest_path))
+        return jsonify({'ok': True})
+    except Exception as exc:
+        # Clean up any temp files on failure
+        for p in tmp_files:
+            if p.exists():
+                p.unlink()
+        return jsonify({'error': str(exc)}), 500
 
 @app.route('/browse')
 def browse():
