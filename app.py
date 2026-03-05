@@ -1571,9 +1571,10 @@ def apply_update():
     files = _update_info.get('files', {})
     tmp_files = []
     try:
-        # Download and verify all files before replacing any
+        # Download from the specific version tag so hashes always match
+        version = _update_info.get('version', 'master')
         for filename, meta in files.items():
-            url      = f"https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/{filename}"
+            url      = f"https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/v{version}/{filename}"
             expected = meta.get('sha256', '')
             tmp_path = SCRIPT_DIR / f"{filename}.update_tmp"
             tmp_files.append(tmp_path)
