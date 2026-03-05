@@ -994,6 +994,26 @@ _SETTINGS = """
   </div>
 </div>
 
+<div class="modal-overlay" id="new-camp-overlay" onclick="if(event.target.id==='new-camp-overlay')closeNewCampModal()">
+  <div class="modal" style="max-width:420px">
+    <div class="m-head">
+      <h3>New Campaign</h3>
+      <button class="m-close" onclick="closeNewCampModal()">✕</button>
+    </div>
+    <div style="padding:1.2rem 1.2rem .8rem">
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.4rem">Campaign Name</label>
+      <input type="text" id="new-camp-name" placeholder="e.g. Curse of Strahd"
+             style="width:100%;box-sizing:border-box"
+             onkeydown="if(event.key==='Enter')confirmNewCamp()" />
+      <div class="feedback" id="new-camp-fb" style="margin-top:.5rem;display:none"></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-ghost" onclick="closeNewCampModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmNewCamp()">Create Campaign</button>
+    </div>
+  </div>
+</div>
+
 <script>
 let _sParty = [];
 let _modalMode = 'folder', _modalCb = null, _selPath = null, _curPath = '';
@@ -1075,12 +1095,24 @@ async function onCampaignSwitch(name) {
   await fetch('/api/campaigns/switch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
   location.reload();
 }
-async function newCampaign() {
-  const name = prompt('New campaign name:');
-  if (!name || !name.trim()) return;
-  const r = await fetch('/api/campaigns/new', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim()})});
+function newCampaign() {
+  document.getElementById('new-camp-name').value = '';
+  const fb = document.getElementById('new-camp-fb');
+  fb.textContent = ''; fb.style.display = 'none';
+  document.getElementById('new-camp-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('new-camp-name').focus(), 50);
+}
+function closeNewCampModal() {
+  document.getElementById('new-camp-overlay').classList.remove('open');
+}
+async function confirmNewCamp() {
+  const name = document.getElementById('new-camp-name').value.trim();
+  if (!name) return;
+  const fb = document.getElementById('new-camp-fb');
+  fb.style.display = 'none';
+  const r = await fetch('/api/campaigns/new', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
   const d = await r.json();
-  if (d.error) { alert(d.error); return; }
+  if (d.error) { fb.textContent = d.error; fb.className = 'feedback err'; fb.style.display = 'block'; return; }
   location.reload();
 }
 async function deleteCampaign() {
