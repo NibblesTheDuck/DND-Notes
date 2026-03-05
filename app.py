@@ -25,7 +25,7 @@ GENERATE_SCRIPT = SCRIPT_DIR / "generate_notes.py"
 _tasks: dict    = {}
 
 # ─── Version / Auto-update ────────────────────────────────────────────────────
-APP_VERSION  = "1.6.2"
+APP_VERSION  = "1.6.3"
 MANIFEST_URL = "https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/manifest.json"
 _update_info: dict = {}   # populated by background thread if update available
 
