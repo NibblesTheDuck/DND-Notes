@@ -15,7 +15,10 @@ __pycache__/
 Claude Igonre this/
 
 # Built executables (build artifacts — rebuild from source)
-*.exe
+DnD Notes.exe
+
+# Installer is distributed via GitHub Releases, not committed to repo
+DnDNotesSetup.exe
 
 # Zip assets (large, not needed in repo)
 *.zip
