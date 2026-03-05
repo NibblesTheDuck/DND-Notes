@@ -27,7 +27,7 @@ if %errorlevel% neq 0 (
 :: Build the exe
 echo  Building exe (takes about 30-60 seconds)...
 echo.
-python -m PyInstaller --onefile --console --name "DnD Notes" --icon="%~dp0icon.ico" "%~dp0launcher.py"
+python -m PyInstaller --onefile --windowed --name "DnD Notes" --icon="%~dp0icon.ico" "%~dp0launcher.py"
 if %errorlevel% neq 0 (
     echo.
     echo  ERROR: Build failed. See output above.

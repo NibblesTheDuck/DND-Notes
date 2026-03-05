@@ -1,11 +1,21 @@
 """
-Launcher for DnD Notes — compiled into DnD Notes.exe via PyInstaller.
+Launcher for DnD Notes — compiled into DnD Notes.exe via PyInstaller (--windowed).
 Finds system Python, installs Flask + pywebview if needed, then runs app.py.
+No console window — errors are shown as Windows message box popups.
 """
 import sys
 import os
 import subprocess
 import shutil
+
+
+def _alert(title, message):
+    """Show a Windows message box. Works with --windowed (no console)."""
+    if os.name == 'nt':
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10)  # 0x10 = MB_ICONERROR
+    else:
+        print(f"{title}: {message}")
 
 
 def find_python():
@@ -39,23 +49,26 @@ def main():
 
     app_path = os.path.join(exe_dir, 'app.py')
     if not os.path.exists(app_path):
-        print(f"\n  ERROR: Could not find app.py")
-        print(f"  Expected it here: {app_path}")
-        print(f"\n  Make sure DnD Notes.exe is in the same folder as app.py.")
-        input("\n  Press Enter to close.")
+        _alert(
+            'D&D Notes — Missing File',
+            f'Could not find app.py.\n\nExpected it here:\n{app_path}\n\n'
+            'Make sure DnD Notes.exe is in the same folder as app.py.'
+        )
         sys.exit(1)
 
     # Find system Python
     python = find_python()
     if not python:
-        print("\n  ERROR: Python is not installed or not in PATH.")
-        print("\n  Download it from:  https://python.org")
-        print("  During install, check the box:  Add Python to PATH")
-        print("  Then restart your PC and try again.")
-        input("\n  Press Enter to close.")
+        _alert(
+            'D&D Notes — Python Not Found',
+            'Python is not installed or not in PATH.\n\n'
+            'Download it from: https://python.org\n\n'
+            'During install, tick the box: "Add Python to PATH"\n'
+            'Then restart your PC and try again.'
+        )
         sys.exit(1)
 
-    # Install required packages if not present
+    # Install required packages if not present (shown as a brief splash via subprocess)
     packages = [
         ('flask',     'flask',   'web server'),
         ('pywebview', 'webview', 'app window'),
@@ -66,20 +79,19 @@ def main():
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
         if result != 0:
-            print(f"  Installing {label} (one-time setup)...")
-            ret = subprocess.call([python, '-m', 'pip', 'install', pip_name, '--quiet'])
+            ret = subprocess.call(
+                [python, '-m', 'pip', 'install', pip_name, '--quiet'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
             if ret != 0:
-                print(f"\n  ERROR: Could not install {pip_name}. Check your internet connection.")
-                input("\n  Press Enter to close.")
+                _alert(
+                    'D&D Notes — Install Failed',
+                    f'Could not install required package: {pip_name}\n\n'
+                    'Check your internet connection and try again.'
+                )
                 sys.exit(1)
 
-    print("  Starting D&D Notes...  the app window will open in a moment.")
-    print("  Keep this window open while using the app.\n")
-
     subprocess.call([python, app_path])
-
-    print("\n  Server stopped.")
-    input("  Press Enter to close.")
 
 
 if __name__ == '__main__':
