@@ -39,11 +39,24 @@ SESSION_NOTES_PATH = VAULT_PATH / "Session Notes"
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def build_template(date: str, session_number: int) -> str:
+def format_duration(seconds: float) -> str:
+    """Convert seconds to a readable duration string like '3h 22m'."""
+    if seconds <= 0:
+        return "Unknown"
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    if h > 0:
+        return f"{h}h {m}m"
+    return f"{m}m"
+
+
+def build_template(date: str, session_number: int, duration_str: str = "") -> str:
     if PARTY_MEMBERS:
         party_sections = "\n\n".join(f"### **🎲 {m} | Notes**\n" for m in PARTY_MEMBERS)
     else:
         party_sections = "### **🎲 Party Notes**\n"
+
+    game_time_line = f"**⏳ Game Time:** {duration_str}" if duration_str else "**⏳ Game Time:**"
 
     return f"""\
 ## **Session Notes — {CAMPAIGN_NAME}**
@@ -52,7 +65,7 @@ def build_template(date: str, session_number: int) -> str:
 
 **📅 Session Date:** {date}
 **🎲 Session Number:** {session_number}
-**⏳ Game Time:**
+{game_time_line}
 
 ---
 
@@ -158,22 +171,25 @@ Guidelines:
 """
 
 
-def transcribe(audio_path: str, model_size: str = "base") -> str:
+def transcribe(audio_path: str, model_size: str = "base") -> tuple[str, float]:
+    """Returns (transcript_text, duration_seconds)."""
     print(f"Loading Whisper model ({model_size})...")
     model = whisper.load_model(model_size)
     print("Transcribing audio... (this may take a few minutes)")
     result = model.transcribe(audio_path, verbose=False)
-    return result["text"]
+    segments = result.get("segments", [])
+    duration = segments[-1]["end"] if segments else 0.0
+    return result["text"], duration
 
 
-def generate_notes(transcript: str, session_number: int, date: str) -> str:
+def generate_notes(transcript: str, session_number: int, date: str, duration_str: str = "") -> str:
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         print("ERROR: GEMINI_API_KEY not set.")
         sys.exit(1)
 
     client = genai.Client(api_key=api_key)
-    filled_template = build_template(date, session_number)
+    filled_template = build_template(date, session_number, duration_str)
     system_prompt   = build_system_prompt()
 
     prompt = f"""\
@@ -237,10 +253,11 @@ def main():
     if not PARTY_MEMBERS:
         print("WARNING: No party members configured.\n")
 
-    transcript = transcribe(str(audio_path), args.model)
-    print(f"Transcription complete ({len(transcript.split())} words)\n")
+    transcript, duration_secs = transcribe(str(audio_path), args.model)
+    duration_str = format_duration(duration_secs)
+    print(f"Transcription complete ({len(transcript.split())} words, {duration_str})\n")
 
-    notes = generate_notes(transcript, args.session, args.date)
+    notes = generate_notes(transcript, args.session, args.date, duration_str)
     transcript_path, notes_path = save_outputs(transcript, notes, args.session, args.date)
 
     print(f"\n=== Done! ===")
