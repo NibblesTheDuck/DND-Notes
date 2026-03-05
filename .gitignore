@@ -22,3 +22,7 @@ Claude Igonre this/
 
 # Claude Code local settings
 .claude/
+
+*.svg
+favicon_logoai/
+favicon_logoai.zip
