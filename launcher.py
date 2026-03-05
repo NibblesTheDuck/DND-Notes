@@ -70,8 +70,10 @@ def main():
 
     # Install required packages if not present (shown as a brief splash via subprocess)
     packages = [
-        ('flask',     'flask',   'web server'),
-        ('pywebview', 'webview', 'app window'),
+        ('flask',     'flask',     'web server'),
+        ('pywebview', 'webview',   'app window'),
+        ('openai',    'openai',    'AI (OpenAI/Ollama)'),
+        ('anthropic', 'anthropic', 'AI (Anthropic)'),
     ]
     for pip_name, import_name, label in packages:
         result = subprocess.call(

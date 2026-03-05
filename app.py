@@ -19,9 +19,12 @@ _tasks: dict    = {}
 
 _DEFAULTS = {
     "setup_complete":  False,
-    "gemini_api_key":  "",
     "active_campaign": "",
     "campaigns":       {},
+    "ai_provider":     "gemini",
+    "api_keys":        {"gemini": "", "openai": "", "anthropic": ""},
+    "ollama_url":      "http://localhost:11434",
+    "ollama_model":    "llama3.1:8b",
 }
 
 _CAMPAIGN_DEFAULTS = {
@@ -32,12 +35,13 @@ _CAMPAIGN_DEFAULTS = {
 }
 
 def _migrate(raw: dict) -> dict:
-    """Upgrade old flat config format to the multi-campaign format."""
+    """Upgrade old config formats to the current format."""
+    # v1.0 → v1.4: flat single-campaign → multi-campaign
     if 'campaign_name' in raw and 'campaigns' not in raw:
         name = raw.get('campaign_name', '') or 'My Campaign'
         raw = {
-            'setup_complete': raw.get('setup_complete', False),
-            'gemini_api_key': raw.get('gemini_api_key', ''),
+            'setup_complete':  raw.get('setup_complete', False),
+            'gemini_api_key':  raw.get('gemini_api_key', ''),
             'active_campaign': name,
             'campaigns': {
                 name: {
@@ -48,6 +52,16 @@ def _migrate(raw: dict) -> dict:
                 }
             },
         }
+    # v1.4 → v1.5: gemini_api_key → api_keys dict
+    if 'gemini_api_key' in raw:
+        api_keys = raw.setdefault('api_keys', {'gemini': '', 'openai': '', 'anthropic': ''})
+        if not api_keys.get('gemini'):
+            api_keys['gemini'] = raw['gemini_api_key']
+        del raw['gemini_api_key']
+    # Ensure all api_keys subkeys exist
+    if 'api_keys' in raw:
+        for k in ('gemini', 'openai', 'anthropic'):
+            raw['api_keys'].setdefault(k, '')
     return raw
 
 def load_cfg() -> dict:
@@ -895,15 +909,38 @@ _SETTINGS = """
 </div>
 <div class="page-wrap">
   <div class="card">
-    <div class="card-title">Gemini API Key</div>
+    <div class="card-title">AI Provider</div>
     <div class="fg">
-      <label>API Key</label>
-      <div class="irow">
-        <input type="password" id="s-apikey" placeholder="AIza…" autocomplete="off" spellcheck="false" />
-        <button class="btn btn-secondary btn-inline" onclick="toggleKeyVis()">Show</button>
-      </div>
+      <label>Provider for Note Generation</label>
+      <select id="s-provider" onchange="onProviderChange()">
+        <option value="gemini">Google Gemini (gemini-2.5-flash)</option>
+        <option value="openai">OpenAI (gpt-4o)</option>
+        <option value="anthropic">Anthropic (claude-sonnet-4-6)</option>
+        <option value="ollama">Ollama — Local / Free</option>
+      </select>
     </div>
-    <button class="btn btn-secondary" onclick="testKey()" style="width:100%">Test Key</button>
+    <div id="s-apikey-section">
+      <div class="fg">
+        <label>API Key</label>
+        <div class="irow">
+          <input type="password" id="s-apikey" placeholder="Paste your API key…" autocomplete="off" spellcheck="false" />
+          <button class="btn btn-secondary btn-inline" onclick="toggleKeyVis()">Show</button>
+        </div>
+      </div>
+      <button class="btn btn-secondary" onclick="testKey()" style="width:100%">Test Key</button>
+    </div>
+    <div id="s-ollama-section" style="display:none">
+      <div class="fg">
+        <label>Ollama Server URL</label>
+        <input type="text" id="s-ollama-url" placeholder="http://localhost:11434" spellcheck="false" />
+      </div>
+      <div class="fg">
+        <label>Model Name</label>
+        <input type="text" id="s-ollama-model" placeholder="llama3.1:8b" spellcheck="false" />
+        <div style="font-size:.75rem;color:var(--muted);margin-top:.25rem">Run <code style="background:var(--input-bg);padding:.1rem .3rem;border-radius:4px">ollama pull llama3.1:8b</code> to download a model.</div>
+      </div>
+      <button class="btn btn-secondary" onclick="testOllama()" style="width:100%">Test Connection</button>
+    </div>
     <div class="feedback" id="s-keyfb"></div>
   </div>
   <div class="card">
@@ -1077,14 +1114,40 @@ function renderParty() {
 }
 function addMember() { if (_sParty.length < 8) { _sParty.push(''); renderParty(); } }
 function toggleKeyVis() { const inp = document.getElementById('s-apikey'); inp.type = inp.type === 'password' ? 'text' : 'password'; }
+
+const _keyPlaceholders = {gemini:'AIza…', openai:'sk-…', anthropic:'sk-ant-…'};
+const _keySaved = {gemini:false, openai:false, anthropic:false};
+
+function onProviderChange() {
+  const p = document.getElementById('s-provider').value;
+  const isOllama = p === 'ollama';
+  document.getElementById('s-apikey-section').style.display = isOllama ? 'none' : '';
+  document.getElementById('s-ollama-section').style.display = isOllama ? '' : 'none';
+  document.getElementById('s-keyfb').style.display = 'none';
+  if (!isOllama) {
+    const inp = document.getElementById('s-apikey');
+    inp.value = '';
+    inp.placeholder = _keySaved[p] ? '(saved — enter new key to change)' : (_keyPlaceholders[p] || 'Paste your API key…');
+  }
+}
 async function testKey() {
-  const key = document.getElementById('s-apikey').value.trim();
-  const fb = document.getElementById('s-keyfb');
+  const key      = document.getElementById('s-apikey').value.trim();
+  const provider = document.getElementById('s-provider').value;
+  const fb       = document.getElementById('s-keyfb');
   if (!key) { showFb(fb, false, 'Enter your API key first.'); return; }
   showFb(fb, null, 'Testing…');
-  const r = await fetch('/api/test-key', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key})});
+  const r = await fetch('/api/test-key', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,provider})});
   const d = await r.json();
   showFb(fb, d.ok, d.ok ? '✓ Key works!' : '✗ ' + d.error);
+}
+async function testOllama() {
+  const url   = (document.getElementById('s-ollama-url').value.trim() || 'http://localhost:11434').replace(/\/$/, '');
+  const model = document.getElementById('s-ollama-model').value.trim() || 'llama3.1:8b';
+  const fb    = document.getElementById('s-keyfb');
+  showFb(fb, null, 'Testing…');
+  const r = await fetch('/api/test-key', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'ollama',ollama_url:url,ollama_model:model})});
+  const d = await r.json();
+  showFb(fb, d.ok, d.ok ? '✓ Ollama connected — model ready!' : '✗ ' + d.error);
 }
 function showFb(el, ok, msg) {
   el.textContent = msg;
@@ -1130,15 +1193,19 @@ async function resetTemplate() {
   if (d.template) document.getElementById('s-template').value = d.template;
 }
 async function saveSettings() {
-  const vault    = document.getElementById('s-vault').value.trim();
-  const campaign = document.getElementById('s-campaign').value.trim();
-  const model    = document.getElementById('s-model').value;
-  const apiKey   = document.getElementById('s-apikey').value.trim();
-  const members  = _sParty.filter(m => m.trim());
-  const template = document.getElementById('s-template').value;
-  const payload  = {campaign_name: campaign, obsidian_vault: vault, party_members: members,
-                    whisper_model: model, note_template: template};
-  if (apiKey) payload.gemini_api_key = apiKey;
+  const vault       = document.getElementById('s-vault').value.trim();
+  const campaign    = document.getElementById('s-campaign').value.trim();
+  const model       = document.getElementById('s-model').value;
+  const apiKey      = document.getElementById('s-apikey').value.trim();
+  const provider    = document.getElementById('s-provider').value;
+  const ollamaUrl   = document.getElementById('s-ollama-url').value.trim();
+  const ollamaModel = document.getElementById('s-ollama-model').value.trim();
+  const members     = _sParty.filter(m => m.trim());
+  const template    = document.getElementById('s-template').value;
+  const payload     = {campaign_name: campaign, obsidian_vault: vault, party_members: members,
+                       whisper_model: model, note_template: template,
+                       ai_provider: provider, ollama_url: ollamaUrl, ollama_model: ollamaModel};
+  if (apiKey) payload[`api_key_${provider}`] = apiKey;
   await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const fb = document.getElementById('save-fb');
   fb.style.display = 'block';
@@ -1156,7 +1223,16 @@ fetch('/api/config').then(r => r.json()).then(cfg => {
   document.getElementById('s-campaign').value = cfg.active_campaign || '';
   document.getElementById('s-vault').value    = cfg.obsidian_vault || '';
   document.getElementById('s-model').value    = cfg.whisper_model || 'base';
-  if (cfg.gemini_api_key) document.getElementById('s-apikey').placeholder = '(saved — enter new key to change)';
+  // AI provider
+  const provider = cfg.ai_provider || 'gemini';
+  document.getElementById('s-provider').value = provider;
+  const saved = cfg.api_keys_saved || {};
+  _keySaved.gemini    = !!saved.gemini;
+  _keySaved.openai    = !!saved.openai;
+  _keySaved.anthropic = !!saved.anthropic;
+  document.getElementById('s-ollama-url').value   = cfg.ollama_url   || 'http://localhost:11434';
+  document.getElementById('s-ollama-model').value = cfg.ollama_model || 'llama3.1:8b';
+  onProviderChange();
   _sParty = cfg.party_members && cfg.party_members.length ? [...cfg.party_members] : [''];
   _curPath = cfg.obsidian_vault || '';
   renderParty();
@@ -1204,9 +1280,21 @@ def api_config():
     if request.method == 'POST':
         data = request.json or {}
         cfg  = load_cfg()
-        # Global keys
+        # Global keys — per-provider API keys
+        api_keys = cfg.setdefault('api_keys', {'gemini': '', 'openai': '', 'anthropic': ''})
+        for provider in ('gemini', 'openai', 'anthropic'):
+            val = (data.get(f'api_key_{provider}') or '').strip()
+            if val:
+                api_keys[provider] = val
+        # Legacy: wizard still posts gemini_api_key
         if data.get('gemini_api_key'):
-            cfg['gemini_api_key'] = data['gemini_api_key']
+            api_keys['gemini'] = data['gemini_api_key']
+        if 'ai_provider' in data:
+            cfg['ai_provider'] = data['ai_provider']
+        if data.get('ollama_url'):
+            cfg['ollama_url'] = data['ollama_url']
+        if data.get('ollama_model'):
+            cfg['ollama_model'] = data['ollama_model']
         if 'setup_complete' in data:
             cfg['setup_complete'] = data['setup_complete']
         # Campaign-specific keys
@@ -1227,9 +1315,13 @@ def api_config():
     # GET — return flat view of active campaign for the UI
     cfg  = load_cfg()
     camp = active_camp(cfg)
+    api_keys = cfg.get('api_keys', {})
     return jsonify({
         'setup_complete':  cfg.get('setup_complete', False),
-        'gemini_api_key':  cfg.get('gemini_api_key', ''),
+        'ai_provider':     cfg.get('ai_provider', 'gemini'),
+        'api_keys_saved':  {k: bool(api_keys.get(k)) for k in ('gemini', 'openai', 'anthropic')},
+        'ollama_url':      cfg.get('ollama_url', 'http://localhost:11434'),
+        'ollama_model':    cfg.get('ollama_model', 'llama3.1:8b'),
         'active_campaign': cfg.get('active_campaign', ''),
         'campaign_names':  list(cfg.get('campaigns', {}).keys()),
         'obsidian_vault':  camp.get('obsidian_vault', ''),
@@ -1319,18 +1411,75 @@ def start_install():
 
 @app.route('/api/test-key', methods=['POST'])
 def test_key():
-    key = (request.json or {}).get('key', '').strip()
-    if not key:
-        return jsonify({'ok': False, 'error': 'No API key provided'})
-    try:
-        from google import genai as gai
-        client = gai.Client(api_key=key)
-        client.models.generate_content(model='models/gemini-2.5-flash', contents='Reply OK.')
-        return jsonify({'ok': True})
-    except ImportError:
-        return jsonify({'ok': False, 'error': 'google-genai not installed yet. Complete Step 1 first.'})
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)[:300]})
+    data     = request.json or {}
+    key      = data.get('key', '').strip()
+    provider = data.get('provider', 'gemini')
+
+    if provider == 'gemini':
+        if not key:
+            return jsonify({'ok': False, 'error': 'No API key provided'})
+        try:
+            from google import genai as gai
+            client = gai.Client(api_key=key)
+            client.models.generate_content(model='models/gemini-2.5-flash', contents='Reply OK.')
+            return jsonify({'ok': True})
+        except ImportError:
+            return jsonify({'ok': False, 'error': 'google-genai not installed yet. Complete Step 1 first.'})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)[:300]})
+
+    elif provider == 'openai':
+        if not key:
+            return jsonify({'ok': False, 'error': 'No API key provided'})
+        try:
+            from openai import OpenAI
+            client = OpenAI(api_key=key)
+            client.chat.completions.create(
+                model='gpt-4o-mini',
+                messages=[{'role': 'user', 'content': 'Reply OK.'}],
+                max_tokens=5,
+            )
+            return jsonify({'ok': True})
+        except ImportError:
+            return jsonify({'ok': False, 'error': 'openai package not installed. Save and restart the app.'})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)[:300]})
+
+    elif provider == 'anthropic':
+        if not key:
+            return jsonify({'ok': False, 'error': 'No API key provided'})
+        try:
+            import anthropic as ant
+            client = ant.Anthropic(api_key=key)
+            client.messages.create(
+                model='claude-haiku-4-5-20251001',
+                max_tokens=5,
+                messages=[{'role': 'user', 'content': 'Reply OK.'}],
+            )
+            return jsonify({'ok': True})
+        except ImportError:
+            return jsonify({'ok': False, 'error': 'anthropic package not installed. Save and restart the app.'})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)[:300]})
+
+    elif provider == 'ollama':
+        ollama_url   = (data.get('ollama_url') or 'http://localhost:11434').rstrip('/')
+        ollama_model = (data.get('ollama_model') or 'llama3.1:8b').strip()
+        try:
+            import urllib.request, json as _json
+            with urllib.request.urlopen(f"{ollama_url}/api/tags", timeout=5) as resp:
+                body = _json.loads(resp.read())
+            models = [m['name'] for m in body.get('models', [])]
+            base = ollama_model.split(':')[0]
+            if not any(m.startswith(base) for m in models):
+                return jsonify({'ok': False, 'error': f'Model "{ollama_model}" not found. Run: ollama pull {ollama_model}'})
+            return jsonify({'ok': True})
+        except OSError:
+            return jsonify({'ok': False, 'error': f"Can't connect to Ollama at {ollama_url}. Is Ollama running?"})
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)[:300]})
+
+    return jsonify({'ok': False, 'error': 'Unknown provider'})
 
 @app.route('/browse')
 def browse():
@@ -1387,13 +1536,21 @@ def generate():
     tid, q = _new_task()
     def run():
         try:
-            camp = active_camp(cfg)
+            camp     = active_camp(cfg)
+            api_keys = cfg.get('api_keys', {})
             env = os.environ.copy()
             env['OBSIDIAN_VAULT']  = camp.get('obsidian_vault', '')
             env['CAMPAIGN_NAME']   = cfg.get('active_campaign', 'My Campaign')
             env['PARTY_MEMBERS']   = ', '.join(camp.get('party_members') or [])
-            if cfg.get('gemini_api_key'):
-                env['GEMINI_API_KEY'] = cfg['gemini_api_key']
+            env['AI_PROVIDER']     = cfg.get('ai_provider', 'gemini')
+            env['OLLAMA_URL']      = cfg.get('ollama_url', 'http://localhost:11434')
+            env['OLLAMA_MODEL']    = cfg.get('ollama_model', 'llama3.1:8b')
+            if api_keys.get('gemini'):
+                env['GEMINI_API_KEY']    = api_keys['gemini']
+            if api_keys.get('openai'):
+                env['OPENAI_API_KEY']    = api_keys['openai']
+            if api_keys.get('anthropic'):
+                env['ANTHROPIC_API_KEY'] = api_keys['anthropic']
             if camp.get('note_template'):
                 env['NOTE_TEMPLATE'] = camp['note_template']
             cmd = [sys.executable, str(GENERATE_SCRIPT),
