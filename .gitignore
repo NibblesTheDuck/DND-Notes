@@ -1,0 +1,24 @@
+# Config — contains API keys, personal vault paths — NEVER commit this
+config.json
+
+# PyInstaller build artifacts
+dist/
+build/
+*.spec
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Old EXE backups folder
+Claude Igonre this/
+
+# Built executables (build artifacts — rebuild from source)
+*.exe
+
+# Zip assets (large, not needed in repo)
+*.zip
+
+# Claude Code local settings
+.claude/
