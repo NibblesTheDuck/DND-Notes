@@ -24,6 +24,7 @@ _DEFAULTS = {
     "party_members":  [],
     "gemini_api_key": "",
     "whisper_model":  "base",
+    "note_template":  "",
 }
 
 def load_cfg():
@@ -890,6 +891,26 @@ _SETTINGS = """
       </select>
     </div>
   </div>
+  <div class="card">
+    <div class="card-title">Note Template</div>
+    <p style="font-size:.82rem;color:var(--muted);margin:0 0 .7rem;line-height:1.6">
+      Customise the markdown sent to the AI. You can add, remove, or rename sections.
+      Keep these placeholders wherever you want them:<br>
+      <code style="background:var(--bg);padding:.1rem .35rem;border-radius:4px;font-size:.78rem">{DATE}</code>
+      <code style="background:var(--bg);padding:.1rem .35rem;border-radius:4px;font-size:.78rem">{SESSION}</code>
+      <code style="background:var(--bg);padding:.1rem .35rem;border-radius:4px;font-size:.78rem">{GAME_TIME}</code>
+      <code style="background:var(--bg);padding:.1rem .35rem;border-radius:4px;font-size:.78rem">{CAMPAIGN_NAME}</code>
+      <code style="background:var(--bg);padding:.1rem .35rem;border-radius:4px;font-size:.78rem">{PARTY_SECTIONS}</code>
+    </p>
+    <textarea id="s-template" rows="18" spellcheck="false"
+      style="width:100%;box-sizing:border-box;font-family:monospace;font-size:.76rem;
+             background:var(--bg);color:var(--text);border:1px solid var(--border);
+             border-radius:6px;padding:.6rem;resize:vertical;line-height:1.5"></textarea>
+    <div style="display:flex;align-items:center;gap:.7rem;margin-top:.5rem">
+      <button class="btn btn-secondary btn-sm" onclick="resetTemplate()">Reset to Default</button>
+      <span style="font-size:.78rem;color:var(--muted)">Saved with the button below.</span>
+    </div>
+  </div>
   <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
   <div id="save-fb" style="margin-top:.6rem;font-size:.85rem;color:var(--success);display:none">✓ Saved</div>
 </div>
@@ -990,13 +1011,21 @@ function showFb(el, ok, msg) {
   el.className = 'feedback' + (ok === true ? ' ok' : ok === false ? ' err' : '');
   el.style.display = 'block';
 }
+async function resetTemplate() {
+  if (!confirm('Reset to the built-in default template? Any customisations will be lost.')) return;
+  const r = await fetch('/api/template/default');
+  const d = await r.json();
+  if (d.template) document.getElementById('s-template').value = d.template;
+}
 async function saveSettings() {
   const vault = document.getElementById('s-vault').value.trim();
   const campaign = document.getElementById('s-campaign').value.trim();
   const model = document.getElementById('s-model').value;
   const apiKey = document.getElementById('s-apikey').value.trim();
   const members = _sParty.filter(m => m.trim());
-  const payload = {campaign_name: campaign, obsidian_vault: vault, party_members: members, whisper_model: model};
+  const template = document.getElementById('s-template').value;
+  const payload = {campaign_name: campaign, obsidian_vault: vault, party_members: members,
+                   whisper_model: model, note_template: template};
   if (apiKey) payload.gemini_api_key = apiKey;
   await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const fb = document.getElementById('save-fb');
@@ -1011,11 +1040,31 @@ fetch('/api/config').then(r => r.json()).then(cfg => {
   _sParty = cfg.party_members && cfg.party_members.length ? [...cfg.party_members] : [''];
   _curPath = cfg.obsidian_vault || '';
   renderParty();
+  // Load template: use saved value or fetch the default
+  if (cfg.note_template) {
+    document.getElementById('s-template').value = cfg.note_template;
+  } else {
+    fetch('/api/template/default').then(r => r.json()).then(d => {
+      if (d.template) document.getElementById('s-template').value = d.template;
+    });
+  }
 });
 </script>
 """
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
+
+@app.route('/api/template/default', methods=['GET'])
+def get_default_template():
+    """Returns the built-in DEFAULT_TEMPLATE text for the Reset button."""
+    try:
+        result = subprocess.run(
+            [sys.executable, str(GENERATE_SCRIPT), '--print-default-template'],
+            capture_output=True, cwd=str(SCRIPT_DIR)
+        )
+        return jsonify({'template': result.stdout.decode('utf-8')})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/')
 def index():
@@ -1155,6 +1204,8 @@ def generate():
             env['PARTY_MEMBERS']   = ', '.join(cfg.get('party_members') or [])
             if cfg.get('gemini_api_key'):
                 env['GEMINI_API_KEY'] = cfg['gemini_api_key']
+            if cfg.get('note_template'):
+                env['NOTE_TEMPLATE'] = cfg['note_template']
             cmd = [sys.executable, str(GENERATE_SCRIPT),
                    audio_path, '--session', session_num,
                    '--date', session_date, '--model', model]

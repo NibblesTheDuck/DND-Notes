@@ -38,34 +38,17 @@ AI_OUTPUT_PATH     = VAULT_PATH / "AI Output"
 SESSION_NOTES_PATH = VAULT_PATH / "Session Notes"
 # ─────────────────────────────────────────────────────────────────────────────
 
-
-def format_duration(seconds: float) -> str:
-    """Convert seconds to a readable duration string like '3h 22m'."""
-    if seconds <= 0:
-        return "Unknown"
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    if h > 0:
-        return f"{h}h {m}m"
-    return f"{m}m"
-
-
-def build_template(date: str, session_number: int, duration_str: str = "") -> str:
-    if PARTY_MEMBERS:
-        party_sections = "\n\n".join(f"### **🎲 {m} | Notes**\n" for m in PARTY_MEMBERS)
-    else:
-        party_sections = "### **🎲 Party Notes**\n"
-
-    game_time_line = f"**⏳ Game Time:** {duration_str}" if duration_str else "**⏳ Game Time:**"
-
-    return f"""\
+# ── Default note template ─────────────────────────────────────────────────────
+# Placeholders substituted at generation time:
+#   {CAMPAIGN_NAME}   {DATE}   {SESSION}   {GAME_TIME}   {PARTY_SECTIONS}
+DEFAULT_TEMPLATE = """\
 ## **Session Notes — {CAMPAIGN_NAME}**
 
 ---
 
-**📅 Session Date:** {date}
-**🎲 Session Number:** {session_number}
-{game_time_line}
+**📅 Session Date:** {DATE}
+**🎲 Session Number:** {SESSION}
+**⏳ Game Time:** {GAME_TIME}
 
 ---
 
@@ -81,7 +64,7 @@ def build_template(date: str, session_number: int, duration_str: str = "") -> st
 
 ---
 
-{party_sections}
+{PARTY_SECTIONS}
 
 ---
 
@@ -145,6 +128,37 @@ def build_template(date: str, session_number: int, duration_str: str = "") -> st
 
 (Anything you want to bring up next session, like unfinished conversations or plans for downtime.)
 """
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def format_duration(seconds: float) -> str:
+    """Convert seconds to a readable duration string like '3h 22m'."""
+    if seconds <= 0:
+        return "Unknown"
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    if h > 0:
+        return f"{h}h {m}m"
+    return f"{m}m"
+
+
+def build_template(date: str, session_number: int, duration_str: str = "") -> str:
+    # Use custom template from env (set by app.py from config) or fall back to default
+    template = os.environ.get("NOTE_TEMPLATE", "").strip() or DEFAULT_TEMPLATE
+
+    if PARTY_MEMBERS:
+        party_sections = "\n\n".join(f"### **🎲 {m} | Notes**\n" for m in PARTY_MEMBERS)
+    else:
+        party_sections = "### **🎲 Party Notes**\n"
+
+    return (
+        template
+        .replace("{CAMPAIGN_NAME}", CAMPAIGN_NAME)
+        .replace("{DATE}", date)
+        .replace("{SESSION}", str(session_number))
+        .replace("{GAME_TIME}", duration_str or "")
+        .replace("{PARTY_SECTIONS}", party_sections)
+    )
 
 
 def build_system_prompt() -> str:
@@ -232,6 +246,11 @@ def save_outputs(transcript: str, notes: str, session_number: int, date: str) ->
 
 
 def main():
+    # Special flag used by app.py's Reset button to fetch the default template text
+    if '--print-default-template' in sys.argv:
+        sys.stdout.buffer.write(DEFAULT_TEMPLATE.encode('utf-8'))
+        sys.exit(0)
+
     parser = argparse.ArgumentParser(description="Generate D&D session notes from audio recording.")
     parser.add_argument("audio_file", help="Path to the session recording")
     parser.add_argument("--session", type=int, required=True)
