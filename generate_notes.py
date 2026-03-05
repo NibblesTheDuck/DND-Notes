@@ -14,7 +14,6 @@ import os
 import sys
 import argparse
 import whisper
-from google import genai
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +32,10 @@ VAULT_PATH    = Path(os.environ.get("OBSIDIAN_VAULT", str(Path.home() / "obsidia
 CAMPAIGN_NAME = os.environ.get("CAMPAIGN_NAME", "My Campaign")
 _party_raw    = os.environ.get("PARTY_MEMBERS", "")
 PARTY_MEMBERS = [m.strip() for m in _party_raw.split(",") if m.strip()]
+
+AI_PROVIDER  = os.environ.get("AI_PROVIDER", "gemini")
+OLLAMA_URL   = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 
 AI_OUTPUT_PATH     = VAULT_PATH / "AI Output"
 SESSION_NOTES_PATH = VAULT_PATH / "Session Notes"
@@ -196,17 +199,10 @@ def transcribe(audio_path: str, model_size: str = "base") -> tuple[str, float]:
     return result["text"], duration
 
 
-def generate_notes(transcript: str, session_number: int, date: str, duration_str: str = "") -> str:
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        print("ERROR: GEMINI_API_KEY not set.")
-        sys.exit(1)
-
-    client = genai.Client(api_key=api_key)
+def _build_prompt(transcript: str, session_number: int, date: str, duration_str: str) -> str:
     filled_template = build_template(date, session_number, duration_str)
     system_prompt   = build_system_prompt()
-
-    prompt = f"""\
+    return f"""\
 {system_prompt}
 
 Here is the session transcript:
@@ -224,12 +220,74 @@ Please fill in the following session notes template based on the transcript abov
 Return only the completed markdown note, nothing else.
 """
 
-    print("Sending transcript to Gemini...")
+
+def _call_gemini(prompt: str) -> str:
+    from google import genai as _genai
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("ERROR: GEMINI_API_KEY not set.")
+        sys.exit(1)
+    client = _genai.Client(api_key=api_key)
     response = client.models.generate_content(
         model="models/gemini-2.5-flash",
         contents=prompt,
     )
     return response.text
+
+
+def _call_openai(prompt: str) -> str:
+    from openai import OpenAI
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        print("ERROR: OPENAI_API_KEY not set.")
+        sys.exit(1)
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+def _call_anthropic(prompt: str) -> str:
+    import anthropic as _ant
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        print("ERROR: ANTHROPIC_API_KEY not set.")
+        sys.exit(1)
+    client = _ant.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=8096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return message.content[0].text
+
+
+def _call_ollama(prompt: str) -> str:
+    from openai import OpenAI
+    client = OpenAI(
+        base_url=OLLAMA_URL.rstrip("/") + "/v1",
+        api_key="ollama",
+    )
+    response = client.chat.completions.create(
+        model=OLLAMA_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+def generate_notes(transcript: str, session_number: int, date: str, duration_str: str = "") -> str:
+    prompt = _build_prompt(transcript, session_number, date, duration_str)
+    print(f"Sending transcript to {AI_PROVIDER.capitalize()}...")
+    if AI_PROVIDER == "openai":
+        return _call_openai(prompt)
+    elif AI_PROVIDER == "anthropic":
+        return _call_anthropic(prompt)
+    elif AI_PROVIDER == "ollama":
+        return _call_ollama(prompt)
+    else:
+        return _call_gemini(prompt)
 
 
 def save_outputs(transcript: str, notes: str, session_number: int, date: str) -> tuple[Path, Path]:
