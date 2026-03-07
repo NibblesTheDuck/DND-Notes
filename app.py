@@ -25,9 +25,10 @@ GENERATE_SCRIPT = SCRIPT_DIR / "generate_notes.py"
 _tasks: dict    = {}
 
 # ─── Version / Auto-update ────────────────────────────────────────────────────
-APP_VERSION  = "1.6.6"
+APP_VERSION  = "1.6.7"
 MANIFEST_URL = "https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/manifest.json"
 _update_info: dict = {}   # populated by background thread if update available
+_webview_mode: bool = True  # set to False when pywebview fails and browser fallback is used
 
 def _check_for_update():
     """Background thread: fetch manifest and store update info if newer version found."""
@@ -336,6 +337,11 @@ _WIZARD = """
         They only need to be installed once and may take a few minutes.
       </p>
       <div class="pkg-list">
+        <div class="pkg-item" id="pkg-webview">
+          <span class="pkg-icon" id="pi-webview">⬜</span>
+          <span class="pkg-name">pywebview <span style="color:var(--muted);font-size:.8rem">(standalone app window)</span></span>
+          <span class="pkg-status" id="ps-webview">Checking…</span>
+        </div>
         <div class="pkg-item" id="pkg-whisper">
           <span class="pkg-icon" id="pi-whisper">⬜</span>
           <span class="pkg-name">openai-whisper <span style="color:var(--muted);font-size:.8rem">(transcription AI)</span></span>
@@ -498,6 +504,8 @@ function setPkg(id, icon, status, color) {
 async function checkDeps() {
   const r = await fetch('/api/check-deps');
   const d = await r.json();
+  if (d.webview) setPkg('webview', '✅', 'Installed', 'var(--success)');
+  else           setPkg('webview', '⬜', 'Not installed', '');
   if (d.whisper) setPkg('whisper', '✅', 'Installed', 'var(--success)');
   else           setPkg('whisper', '⬜', 'Not installed', '');
   if (d.genai)   setPkg('genai',   '✅', 'Installed', 'var(--success)');
@@ -517,6 +525,7 @@ async function doInstall() {
   const log = document.getElementById('install-log');
   log.classList.add('show');
   log.innerHTML = '';
+  setPkg('webview', '⏳', 'Waiting…', 'var(--warn)');
   setPkg('whisper', '⏳', 'Waiting…', 'var(--warn)');
   setPkg('genai',   '⏳', 'Waiting…', 'var(--warn)');
   setPkg('ffmpeg',  '⏳', 'Waiting…', 'var(--warn)');
@@ -716,6 +725,15 @@ _MAIN = """
     <button class="btn btn-primary btn-sm" onclick="applyUpdate()">Update Now</button>
     <button class="btn btn-ghost btn-sm" onclick="dismissUpdate()">Later</button>
     <span class="u-msg" id="update-msg"></span>
+  </div>
+</div>
+
+<div class="update-banner" id="browser-mode-banner" style="display:none">
+  <div class="u-title">⚠ Running in browser mode</div>
+  <div class="u-log">pywebview could not load — the app opened in your browser instead. Install pywebview to get a standalone window, then restart.</div>
+  <div class="u-actions">
+    <button class="btn btn-primary btn-sm" onclick="window.location='/wizard'">Install pywebview</button>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('browser-mode-banner').style.display='none'">Dismiss</button>
   </div>
 </div>
 
@@ -953,6 +971,10 @@ fetch('/api/update-status').then(r => r.json()).then(d => {
     p.textContent = '• ' + item; cl.appendChild(p);
   });
   banner.style.display = 'block';
+});
+fetch('/api/webview-status').then(r => r.json()).then(d => {
+  if (!d.webview_mode)
+    document.getElementById('browser-mode-banner').style.display = 'block';
 });
 async function applyUpdate() {
   const msg = document.getElementById('update-msg');
@@ -1453,6 +1475,10 @@ def campaign_delete():
 def check_deps():
     results = {}
     try:
+        import webview; results['webview'] = True       # noqa: F401,E702
+    except ImportError:
+        results['webview'] = False
+    try:
         import whisper; results['whisper'] = True       # noqa: F401,E702
     except ImportError:
         results['whisper'] = False
@@ -1471,9 +1497,10 @@ def start_install():
     tid, q = _new_task()
     def run():
         packages = [
+            ('pywebview',        'webview'),
             ('openai-whisper',   'whisper'),
             ('google-genai',     'genai'),
-            ('imageio-ffmpeg',    'ffmpeg'),
+            ('imageio-ffmpeg',   'ffmpeg'),
         ]
         for pip_name, short in packages:
             q.put(('log', f'INSTALLING:{short}'))
@@ -1573,6 +1600,10 @@ def update_status():
             'changelog': _update_info.get('changelog', []),
         })
     return jsonify({'available': False})
+
+@app.route('/api/webview-status')
+def webview_status():
+    return jsonify({'webview_mode': _webview_mode})
 
 @app.route('/api/apply-update', methods=['POST'])
 def apply_update():
@@ -1805,6 +1836,8 @@ if __name__ == '__main__':
         webview.start(icon=icon_path if os.path.exists(icon_path) else None)
     except Exception:
         # Fallback: open in system browser if pywebview is unavailable
+        global _webview_mode
+        _webview_mode = False
         import webbrowser
         webbrowser.open(url)
         input("\n  Browser opened. Press Enter here to stop the server.\n")

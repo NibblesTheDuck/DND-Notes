@@ -1,11 +1,11 @@
 {
-  "version": "1.6.6",
+  "version": "1.6.7",
   "changelog": [
-    "Fix crash when pywebview fails to install â€” app now falls back to browser"
+    "Add browser-mode banner and pywebview to package installer"
   ],
   "files": {
     "app.py": {
-      "sha256": "af704c29a303b5561e08e75f326af78065233d068246e3fd6ae91a7a6275801b"
+      "sha256": "e26c27f3ca1a07a52877b62123b706aaaa264075b439dbab3d439e08975a4abe"
     },
     "generate_notes.py": {
       "sha256": "5cdffef22d8bab01a6fd14be56d947c05a887ab8b148123f7b956ff223c8e6c6"
