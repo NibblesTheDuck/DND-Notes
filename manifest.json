@@ -1,11 +1,11 @@
 {
-  "version": "1.6.5",
+  "version": "1.6.6",
   "changelog": [
-    "Fix crash when Whisper progress bar outputs Unicode characters"
+    "Fix crash when pywebview fails to install â€” app now falls back to browser"
   ],
   "files": {
     "app.py": {
-      "sha256": "b51f993260847bb68119e115083ab4faca85fb6904a2914a6f930c5b9827e198"
+      "sha256": "af704c29a303b5561e08e75f326af78065233d068246e3fd6ae91a7a6275801b"
     },
     "generate_notes.py": {
       "sha256": "5cdffef22d8bab01a6fd14be56d947c05a887ab8b148123f7b956ff223c8e6c6"

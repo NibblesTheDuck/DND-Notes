@@ -71,14 +71,16 @@ def main():
         )
         sys.exit(1)
 
-    # Install required packages if not present
+    # Install required packages if not present.
+    # optional=True  → failure is silently skipped; app.py handles the missing package gracefully.
+    # optional=False → failure shows an error dialog and exits (app cannot run without it).
     packages = [
-        ('flask',     'flask',     'web server'),
-        ('pywebview', 'webview',   'app window'),
-        ('openai',    'openai',    'AI (OpenAI/Ollama)'),
-        ('anthropic', 'anthropic', 'AI (Anthropic)'),
+        ('flask',     'flask',     'web server',        False),  # required
+        ('pywebview', 'webview',   'app window',         True),  # optional — app falls back to browser
+        ('openai',    'openai',    'AI (OpenAI/Ollama)', True),  # optional — only needed for that provider
+        ('anthropic', 'anthropic', 'AI (Anthropic)',     True),  # optional — only needed for that provider
     ]
-    for pip_name, import_name, label in packages:
+    for pip_name, import_name, label, optional in packages:
         result = subprocess.call(
             [python, '-c', f'import {import_name}'],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -90,7 +92,7 @@ def main():
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 creationflags=_NO_WINDOW
             )
-            if ret != 0:
+            if ret != 0 and not optional:
                 _alert(
                     'D&D Notes — Install Failed',
                     f'Could not install required package: {pip_name}\n\n'
