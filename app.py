@@ -25,7 +25,7 @@ GENERATE_SCRIPT = SCRIPT_DIR / "generate_notes.py"
 _tasks: dict    = {}
 
 # ─── Version / Auto-update ────────────────────────────────────────────────────
-APP_VERSION  = "1.6.8"
+APP_VERSION  = "1.6.9"
 MANIFEST_URL = "https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/manifest.json"
 _update_info: dict = {}   # populated by background thread if update available
 _webview_mode = True  # set to False when pywebview fails and browser fallback is used
@@ -1836,7 +1836,6 @@ if __name__ == '__main__':
         webview.start(icon=icon_path if os.path.exists(icon_path) else None)
     except Exception:
         # Fallback: open in system browser if pywebview is unavailable
-        global _webview_mode
         _webview_mode = False
         import webbrowser
         webbrowser.open(url)

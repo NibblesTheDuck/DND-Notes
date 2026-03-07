@@ -1,11 +1,11 @@
 {
-  "version": "1.6.8",
+  "version": "1.6.9",
   "changelog": [
-    "Hotfix: app failed to start due to annotated global variable"
+    "Hotfix: remove invalid global declaration that prevented app from starting"
   ],
   "files": {
     "app.py": {
-      "sha256": "5d83f63a8868d2905efee64c57f76de5f8cd4db313043d9f994b33a73c6ac175"
+      "sha256": "5e7b06ac83ec4138e5cdb9c32967d9ce5a16aca973432c8ef2cfa9cb274d7825"
     },
     "generate_notes.py": {
       "sha256": "5cdffef22d8bab01a6fd14be56d947c05a887ab8b148123f7b956ff223c8e6c6"
