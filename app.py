@@ -25,10 +25,10 @@ GENERATE_SCRIPT = SCRIPT_DIR / "generate_notes.py"
 _tasks: dict    = {}
 
 # ─── Version / Auto-update ────────────────────────────────────────────────────
-APP_VERSION  = "1.6.7"
+APP_VERSION  = "1.6.8"
 MANIFEST_URL = "https://raw.githubusercontent.com/NibblesTheDuck/DND-Notes/master/manifest.json"
 _update_info: dict = {}   # populated by background thread if update available
-_webview_mode: bool = True  # set to False when pywebview fails and browser fallback is used
+_webview_mode = True  # set to False when pywebview fails and browser fallback is used
 
 def _check_for_update():
     """Background thread: fetch manifest and store update info if newer version found."""
