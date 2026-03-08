@@ -1,16 +1,15 @@
 {
-  "version": "1.7.0",
+  "version": "1.7.1",
   "changelog": [
-    "Fix ffmpeg not found \u2014 Whisper now works on machines without system ffmpeg installed",
-    "imageio-ffmpeg is now auto-installed at first launch alongside flask",
-    "Clear error message if ffmpeg is still missing instead of cryptic WinError 2"
+    "Previous session notes are now fed to the AI as context for smarter, more consistent notes",
+    "AI will reference past NPCs, locations and storylines instead of treating each session in isolation"
   ],
   "files": {
     "app.py": {
-      "sha256": "57b99e0f132b5ea78b4221187ec011660932b0b93d87f50dfa013e193adff700"
+      "sha256": "9ac63733bb400dd978e5c1397d6bc97f84a7e7b94f2e82780c7a6ea52265fd0b"
     },
     "generate_notes.py": {
-      "sha256": "bccc24a488f69d32aed8a3db15c54118a29428fb41c4ca92504989120502b44c"
+      "sha256": "1fba4852d515a8a4c41dd9e41ab54074a7f97d81a3b07926755f156140a196b2"
     }
   }
 }

@@ -170,13 +170,31 @@ def build_template(date: str, session_number: int, duration_str: str = "") -> st
     )
 
 
-def build_system_prompt() -> str:
+def _load_previous_notes() -> str:
+    """Load all finalised notes from Session Notes/ for campaign context."""
+    if not SESSION_NOTES_PATH.exists():
+        return ""
+    md_files = sorted(SESSION_NOTES_PATH.glob("*.md"))
+    if not md_files:
+        return ""
+    parts = []
+    for f in md_files:
+        try:
+            content = f.read_text(encoding="utf-8", errors="replace").strip()
+            if content:
+                parts.append(f"=== {f.name} ===\n{content}")
+        except Exception:
+            continue
+    return "\n\n".join(parts)
+
+
+def build_system_prompt(has_previous_notes: bool = False) -> str:
     if PARTY_MEMBERS:
         party_list = "\n".join(f"- {m}" for m in PARTY_MEMBERS)
     else:
         party_list = "- (No party members configured)"
 
-    return f"""\
+    base = f"""\
 You are a D&D session scribe. You will be given a raw transcript of a D&D session recording and a note template.
 Your job is to fill in the template accurately based only on what happened in the transcript.
 
@@ -192,6 +210,16 @@ Guidelines:
 - Keep the markdown formatting and emoji headers exactly as given in the template.
 - Do not add sections that aren't in the template.
 """
+
+    if has_previous_notes:
+        base += """
+You have been given notes from all previous sessions of this campaign in <previous_session_notes>.
+Use them to maintain consistency with NPC names, locations, and ongoing storylines.
+Focus on what is NEW in the current session — do not repeat facts already well-covered in earlier notes.
+Reference previous sessions naturally where it adds useful context (e.g. "returned to the city they fled in Session 2").
+"""
+
+    return base
 
 
 def transcribe(audio_path: str, model_size: str = "base") -> tuple[str, float]:
@@ -213,12 +241,20 @@ def transcribe(audio_path: str, model_size: str = "base") -> tuple[str, float]:
 
 
 def _build_prompt(transcript: str, session_number: int, date: str, duration_str: str) -> str:
+    previous_notes  = _load_previous_notes()
+    has_prev        = bool(previous_notes)
     filled_template = build_template(date, session_number, duration_str)
-    system_prompt   = build_system_prompt()
+    system_prompt   = build_system_prompt(has_previous_notes=has_prev)
+
+    prev_block = (
+        f"\n<previous_session_notes>\n{previous_notes}\n</previous_session_notes>\n"
+        if has_prev else ""
+    )
+
     return f"""\
 {system_prompt}
-
-Here is the session transcript:
+{prev_block}
+Here is the transcript for the current session:
 
 <transcript>
 {transcript}
@@ -342,6 +378,10 @@ def main():
 
     if not PARTY_MEMBERS:
         print("WARNING: No party members configured.\n")
+
+    prev_files = list(SESSION_NOTES_PATH.glob("*.md")) if SESSION_NOTES_PATH.exists() else []
+    if prev_files:
+        print(f"Loading {len(prev_files)} previous session note(s) for context...")
 
     transcript, duration_secs = transcribe(str(audio_path), args.model)
     duration_str = format_duration(duration_secs)
