@@ -30,7 +30,7 @@ if os.name == "nt":
         _ffmpeg_dir = os.path.dirname(imageio_ffmpeg.get_ffmpeg_exe())
         os.environ["PATH"] = _ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
     except ImportError:
-        pass  # ffmpeg must be on PATH manually if imageio-ffmpeg isn't installed
+        print("WARNING: imageio-ffmpeg not installed — ffmpeg must be in system PATH.", flush=True)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # ── Config from environment variables (set by app.py) ────────────────────────
@@ -199,7 +199,14 @@ def transcribe(audio_path: str, model_size: str = "base") -> tuple[str, float]:
     print(f"Loading Whisper model ({model_size})...")
     model = whisper.load_model(model_size)
     print("Transcribing audio... (this may take a few minutes)")
-    result = model.transcribe(audio_path, verbose=False)
+    try:
+        result = model.transcribe(audio_path, verbose=False)
+    except FileNotFoundError:
+        sys.exit(
+            "\nERROR: ffmpeg not found. Whisper needs ffmpeg to decode audio files.\n"
+            "Fix: open the DnD Notes app, click 'Setup Wizard', and install all packages.\n"
+            "Or install ffmpeg manually from https://ffmpeg.org/download.html"
+        )
     segments = result.get("segments", [])
     duration = segments[-1]["end"] if segments else 0.0
     return result["text"], duration

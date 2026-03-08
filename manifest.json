@@ -1,14 +1,16 @@
 {
-  "version": "1.6.9",
+  "version": "1.7.0",
   "changelog": [
-    "Hotfix: remove invalid global declaration that prevented app from starting"
+    "Fix ffmpeg not found \u2014 Whisper now works on machines without system ffmpeg installed",
+    "imageio-ffmpeg is now auto-installed at first launch alongside flask",
+    "Clear error message if ffmpeg is still missing instead of cryptic WinError 2"
   ],
   "files": {
     "app.py": {
-      "sha256": "5e7b06ac83ec4138e5cdb9c32967d9ce5a16aca973432c8ef2cfa9cb274d7825"
+      "sha256": "57b99e0f132b5ea78b4221187ec011660932b0b93d87f50dfa013e193adff700"
     },
     "generate_notes.py": {
-      "sha256": "5cdffef22d8bab01a6fd14be56d947c05a887ab8b148123f7b956ff223c8e6c6"
+      "sha256": "bccc24a488f69d32aed8a3db15c54118a29428fb41c4ca92504989120502b44c"
     }
   }
 }

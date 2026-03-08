@@ -35,6 +35,8 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+Filename: "{cmd}"; Parameters: "/C python -m pip install pywebview --quiet"; Flags: runhidden; StatusMsg: "Installing pywebview (standalone window support)..."
+Filename: "{cmd}"; Parameters: "/C python -m pip install imageio-ffmpeg --quiet"; Flags: runhidden; StatusMsg: "Installing ffmpeg (audio support)..."
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch DnD Note Generator now"; Flags: nowait postinstall skipifsilent
 
 [Code]

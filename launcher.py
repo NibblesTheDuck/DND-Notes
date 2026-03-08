@@ -75,10 +75,11 @@ def main():
     # optional=True  → failure is silently skipped; app.py handles the missing package gracefully.
     # optional=False → failure shows an error dialog and exits (app cannot run without it).
     packages = [
-        ('flask',     'flask',     'web server',        False),  # required
-        ('pywebview', 'webview',   'app window',         True),  # optional — app falls back to browser
-        ('openai',    'openai',    'AI (OpenAI/Ollama)', True),  # optional — only needed for that provider
-        ('anthropic', 'anthropic', 'AI (Anthropic)',     True),  # optional — only needed for that provider
+        ('flask',          'flask',          'web server',        False),  # required
+        ('pywebview',      'webview',        'app window',         True),  # optional — app falls back to browser
+        ('imageio-ffmpeg', 'imageio_ffmpeg', 'audio decoder',      True),  # optional — needed for Whisper/ffmpeg on Windows
+        ('openai',         'openai',         'AI (OpenAI/Ollama)', True),  # optional — only needed for that provider
+        ('anthropic',      'anthropic',      'AI (Anthropic)',     True),  # optional — only needed for that provider
     ]
     for pip_name, import_name, label, optional in packages:
         result = subprocess.call(
